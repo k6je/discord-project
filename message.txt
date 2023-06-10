@@ -1,0 +1,492 @@
+const config = require("./config");
+const { Client } = require("discord.js-selfbot-v13");
+let tokens = config.tokens.filter(x => x.length > 0);
+let proxys = config.proxys.filter(x => x.length > 0);
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
+const langs = require("./langs");
+language2()
+let lang = langs[config.defaultLanguage.toLowerCase()];
+
+async function randomProxy() {
+
+    if(!proxys.length > 0) return '';
+    let proxy = proxys[Math.floor(Math.random() * proxys.length)];
+    return proxy;
+
+}
+
+async function restart() {
+
+    console.log(lang.RESTARTING);
+    await wait(3000);
+    console.clear();
+    return process.exit();
+
+}
+
+async function language2() {
+
+    let data = await language();
+    lang = langs[data.toLowerCase() || config.defaultLanguage.toLowerCase()];
+    return lang;
+
+}
+
+async function language() { 
+
+    let defaultLanguage = config.languages.includes(config.defaultLanguage.toLowerCase()) ? config.defaultLanguage.toLowerCase() : "en";
+    let data = await db.get("language") || defaultLanguage;
+    return data;
+
+}
+
+async function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function replaceAll(string, options= {}) {
+
+    await Promise.all([options].map(async(option) => {
+
+        let find = Object.keys(option)[0];
+        let replace = Object.values(option)[0];
+
+        string = string.replaceAll(`{${find}}`, replace);
+
+    }))
+
+    return string;
+
+}
+
+async function login(token, client) {
+
+try {
+
+    await client.login(token)
+    return true;
+
+} catch (error) {
+
+    console.log(await replaceAll(lang.LOGIN_ERROR, { token: token }))
+    return false;
+
+}
+
+}
+
+async function loginAllAndClickButton(channel_id, message_id, button_id, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS);
+
+    if(!channel_id || !message_id || !button_id) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(channel_id, message_id, button_id)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+    let row = null;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    const client = new Client({ checkUpdate: false });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        let channel;
+        try { channel = await client.channels.fetch(channel_id) } catch { return channel = null }
+        if(!channel) return console.log(await replaceAll(lang.CHANNEL_NOT_FOUND, { clientUTAG: client.user.tag }))
+
+        let message;
+        try { message = await channel.messages.fetch(message_id) } catch { return message = null }
+        if(!message) return console.log(await replaceAll(lang.MESSAGE_NOT_FOUND, { clientUTAG: client.user.tag }))
+
+        if(!row) {
+
+        row = message.components.find(x => x.type === "ACTION_ROW" && x.components[0].type === "BUTTON");
+        row = message.components.indexOf(row);
+
+        }
+
+        if(!Number(row) && row !== 0) return console.log(await replaceAll(lang.ROW_NOT_FOUND, { clientUTAG: client.user.tag }));
+
+        try {
+
+        await wait(i * time * 1000);
+        await message.clickButton({ row: row, col: button_id - 1 })
+        console.log(await replaceAll(lang.BUTTON_CLICKED, { clientUTAG: client.user.tag }));
+
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.BUTTON_NOT_FOUND, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+}))
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_BUTTON_CLICKED, { result: result }));
+
+}
+
+async function loginAllAndReactEmoji(channel_id, message_id, emoji, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!channel_id || !message_id || !emoji) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(channel_id, message_id, emoji)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    const client = new Client({ checkUpdate: false });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        let channel;
+        try { channel = await client.channels.fetch(channel_id) } catch { return channel = null }
+        if(!channel) return console.log(await replaceAll(lang.CHANNEL_NOT_FOUND, { clientUTAG: client.user.tag }))
+
+        let message;
+        try { message = await channel.messages.fetch(message_id) } catch { return message = null }
+        if(!message) return console.log(await replaceAll(lang.MESSAGE_NOT_FOUND, { clientUTAG: client.user.tag }))
+
+        try {
+
+        await wait(i * time * 1000);
+        await message.react(emoji)
+        console.log(await replaceAll(lang.EMOJI_REACTED, { clientUTAG: client.user.tag }));
+
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.EMOJI_NOT_FOUND, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+}))
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_EMOJI_REACTED, { result: result }));
+
+}
+
+async function loginAllAndSend(channel_id, message, time, many, many2) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!channel_id || !message) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(channel_id, message)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(many2)) many2 = 1;
+    if(!Number(time)) time = 0;
+
+    let result = 0;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        try {
+
+        for (let i = 0; i < many2; i++) {
+
+        await wait(i * time * 1000);
+        console.log(await replaceAll(lang.MESSAGE_SENT, { clientUTAG: client.user.tag }));
+        
+        }
+
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.MESSAGE_NOT_SEND, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+}))
+
+}
+
+async function loginAllAndAddFriend(user_id, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!user_id) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(user_id)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+    let user;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        try {
+
+        await wait(i * time * 1000);
+        console.log(await replaceAll(lang.FRIEND_REQUEST_SENT, { clientUTAG: client.user.tag }));
+
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.FRIEND_REQUEST_NOT_SENT, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+
+}))
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_FRIEND_REQUEST_SENT, { result: result }));
+
+}
+
+async function loginAllAndCancelFriend(user_id, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!user_id) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(user_id)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        try {
+
+        await wait(i * time * 1000);
+        console.log(await replaceAll(lang.FRIEND_REQUEST_CANCELED, { clientUTAG: client.user.tag }));
+
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.FRIEND_REQUEST_NOT_CANCELED, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+}));
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_FRIEND_REQUEST_CANCELED, { result: result }));
+
+}
+
+async function loginAllAndJoinServer(invite, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!invite) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(invite)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        try {
+
+        await wait(i * time * 1000);
+        console.log(await replaceAll(lang.SERVER_JOINED, { clientUTAG: client.user.tag }));
+        
+        return result++;
+
+        } catch (error) {
+            return console.log(await replaceAll(lang.SERVER_NOT_JOINED, { clientUTAG: client.user.tag }));
+        }
+
+    })
+
+}))
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_SERVER_JOINED, { result: result }));
+
+}
+
+async function loginAllAndLeaveServer(server_id, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!server_id) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(server_id)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+    let result = 0;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+    client.on("ready", async() => {
+
+        let guild;
+        try { guild = await client.guilds.fetch(server_id) } catch { return console.log(await replaceAll(lang.SERVER_NOT_FOUND, { clientUTAG: client.user.tag })) }
+        if(!guild) return console.log(await replaceAll(lang.SERVER_NOT_FOUND, { clientUTAG: client.user.tag }))
+
+        try {
+
+        await wait(i * time * 1000);
+        await guild.leave()
+        console.log(await replaceAll(lang.SERVER_LEFT, { clientUTAG: client.user.tag }))
+        
+        return result++;
+
+        } catch { 
+            return console.log(await replaceAll(lang.SERVER_NOT_LEFT, { clientUTAG: client.user.tag }))
+        }
+
+    })
+
+}));
+
+await wait((tokens.length + 1) * time * 2000);
+return console.log(await replaceAll(lang.TOTAL_SERVER_LEFT, { result: result }))
+
+}
+
+async function sendDM(token, users, time) {
+
+    if(!users) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(users)" }));
+
+    if(!Number(time)) time = 1;
+
+    let proxy = await randomProxy();
+
+    const client = new Client({ checkUpdate: false, proxy: proxy, captchaKey: config.captchaKey, captchaService: config.captchaService });
+    if(await login(token, client) === false) return;
+
+client.on("ready", async(client) => {
+
+    let result = 0;
+
+await Promise.all(users.map(async(user, i) => {
+
+    try {
+            
+        await wait(i * time * 1000);
+        await user.send(config.message)
+        console.log(await replaceAll(lang.MASSDM_SENT, { userTAG: user.tag, clientUTAG: client.user.tag }))
+        return result++
+
+    } catch (error) {
+        console.log(error)
+        return console.log(await replaceAll(lang.MASSDM_NOT_SENT, { userTag: user.tag, clientUTAG: client.user.tag }))
+    }
+
+}))
+
+})
+
+}
+
+async function distributeTokens(users, time, many) {
+
+    if(!tokens.length > 0) return console.log(lang.NO_TOKENS)
+
+    if(!users) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(users)" }));
+
+    if(Number(many) && many !== 0) tokens = tokens.slice(0, many)
+    if(!Number(time)) time = 1;
+
+await Promise.all(tokens.map(async(token, i) => {
+
+    i = i * config.maxUsers;
+
+    let users_id = users.slice(i, i + config.maxUsers);
+    await sendDM(token, users_id, time)
+
+}))
+
+}
+
+async function setLanguage(diliste) {
+
+    if(!diliste) return console.log(await replaceAll(lang.MISSING_PARAMETERS, { parameters: "(lang)" }));
+    diliste = diliste.toLowerCase();
+
+    switch(diliste) {
+        case "en":
+            await db.set("language", diliste);
+            dil = diliste;
+            lang = langs[diliste || config.defaultLanguage]
+            console.log("Language set to English.")
+            break;
+        case "tr":
+            await db.set("language", diliste);
+            dil = diliste;
+            lang = langs[diliste || config.defaultLanguage]
+            console.log("Dil Türkçe olarak ayarlandı.")
+            break;
+        case "fr":
+            await db.set("language", diliste);
+            dil = diliste;
+            lang = langs[diliste || config.defaultLanguage]
+            console.log("La langue est réglée sur le français.")
+            break;
+        default:
+            console.log("Language not found.")
+            break;
+    }
+
+}
+
+module.exports = {
+    loginAllAndClickButton,
+    loginAllAndReactEmoji,
+    loginAllAndSend,
+    loginAllAndAddFriend,
+    loginAllAndCancelFriend,
+    loginAllAndJoinServer,
+    loginAllAndLeaveServer,
+    distributeTokens,
+    language,
+    setLanguage,
+    replaceAll,
+    restart,
+    wait,
+}
